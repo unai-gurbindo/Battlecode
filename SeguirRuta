@@ -1,0 +1,70 @@
+package camelmanplayer;
+
+import battlecode.common.Clock;
+import battlecode.common.Direction;
+import battlecode.common.GameActionException;
+import battlecode.common.MapLocation;
+import battlecode.common.RobotController;
+import scala.collection.parallel.ParIterableLike.Max;
+
+public class SeguirRuta {
+
+    //La funcion encontrar camino lo que hace es una vez que le des la destination, encontrara la forma mas rapida de ir
+    public static Direction encontrarcamino(MapLocation destination, RobotController robotController) {
+        if ( destination == null ) {    //Si no hay destino se queda donde esta
+            return ( Direction.CENTER );
+        }
+
+        final int distanciaejex = destination.x - robotController.getLocation().x;
+        final int distanciaejey = destination.y - robotController.getLocation().y;
+        //destination.x devuelve la coordenada X del destino y getLocation.x devuelve la coordenada X del robot que queremos mover, entonces si la resta es positiva
+        //significa que el destino esta mas arriba que donde se encuentra y tendra que ir al norte y asi con el resto de resultados... lo mismo para las Y
+
+        if (distanciaejex>0 && distanciaejey>0 && robotController.canMove(Direction.NORTHEAST)){
+            return Direction.NORTHEAST; //Si las dos positivas tiene que ir al noreste(arriba-derecha)
+        }
+        else if (distanciaejex<0 && distanciaejey>0 && robotController.canMove(Direction.NORTHWEST)){
+            return Direction.NORTHWEST; //Si las X negativa y la Y positiva tiene que ir al noroeste(arriba-izquierda)
+        }
+        else if (distanciaejex>0 && distanciaejey<0 && robotController.canMove(Direction.SOUTHEAST)){
+            return Direction.SOUTHEAST; //Si las X positiva y la Y negativa tiene que ir al sureste(abajo-derecha)
+        }
+        else if (distanciaejex<0 && distanciaejey<0 && robotController.canMove(Direction.SOUTHWEST)){
+            return Direction.SOUTHWEST; //Si las dos son negativas tiene que ir al suroeste(abajo-izquierda)
+        }
+        //Ahora bien, si por lo que sea robotController.canMove(...) no se pudiera mover a ninguna de esas direcciones pues los movemos recto y no en diagonal:
+
+        if (distanciaejex>0 && robotController.canMove(Direction.EAST)){
+                return Direction.EAST;
+        }
+        if (distanciaejex<0 && robotController.canMove(Direction.WEST)){
+                return Direction.WEST;
+        }
+        if (distanciaejey>0 && robotController.canMove(Direction.NORTH)){
+            return Direction.NORTH;
+        }
+        if (distanciaejey<0 && robotController.canMove(Direction.SOUTH)){
+            return Direction.SOUTH;
+        }
+        return Direction.CENTER; //Si no se puede mover a ningun lado pues que se quede quito
+    }
+    public static void move(Direction direction, RobotController robotController) throws GameActionException {
+        if (robotController.canMove(direction)) {
+            robotController.move(direction);
+            Clock.yield();
+        } else {
+            direction = encontrarcamino(new MapLocation(direction.dx, direction.dy), robotController);
+            robotController.move(direction);
+            Clock.yield();
+        }
+    }
+    public static boolean tryMove(Direction direction, RobotController robotController) throws GameActionException {
+        boolean hasMoved = false;
+        if (robotController.canMove(direction)) {
+            robotController.move(direction);
+            hasMoved = true;
+        }
+
+        return (hasMoved);
+    }
+}
