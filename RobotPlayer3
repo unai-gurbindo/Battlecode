@@ -1,0 +1,319 @@
+package Torneo;
+import battlecode.common.*;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.HashSet;
+
+public strictfp class RobotPlayer {
+    static RobotController rc;
+
+    static final RobotType[] spawnableRobot = {
+        RobotType.POLITICIAN,
+        RobotType.SLANDERER,
+        RobotType.MUCKRAKER,
+    };
+
+    static final Direction[] directions = {
+            Direction.NORTH,
+            Direction.NORTHEAST,
+            Direction.EAST,
+            Direction.SOUTHEAST,
+            Direction.SOUTH,
+            Direction.SOUTHWEST,
+            Direction.WEST,
+            Direction.NORTHWEST,
+        };
+
+    static int turnCount;
+
+    /**
+     * run() is the method that is called when a robot is instantiated in the Battlecode world.
+     * If this method returns, the robot dies!
+     **/
+    @SuppressWarnings("unused")
+    public static void run(RobotController rc) throws GameActionException {
+
+        // This is the RobotController object. You use it to perform actions from this robot,
+        // and to get information on its current status.
+        RobotPlayer.rc = rc;
+        EnlightenmentCenter EC =new EnlightenmentCenter(rc);
+        turnCount = 0;
+        System.out.println("I'm a " + rc.getType() + " and I just got created!");
+        EcEncontrado=false;
+        while (true) {
+            turnCount += 1;
+            // Try/catch blocks stop unhandled exceptions, which cause your robot to freeze
+            try {
+                // Here, we've separated the controls into a different method for each RobotType.
+                // You may rewrite this into your own control structure if you wish.
+                System.out.println("I'm a " + rc.getType() + "! Location " + rc.getLocation());
+                switch (rc.getType()) {
+                    case ENLIGHTENMENT_CENTER: runEnlightenmentCenter(); break;
+                    case POLITICIAN:           runPolitician();          break;
+                    case SLANDERER:            runSlanderer();           break;
+                    case MUCKRAKER:            runMuckraker();           break;
+                }
+                //Apostar voto (depende estrategia)
+                EC.run();
+                // Clock.yield() makes the robot wait until the next turn, then it will perform this loop again
+                Clock.yield();          
+                
+            } catch (Exception e) {
+                System.out.println(rc.getType() + " Exception");
+                e.printStackTrace();
+            }
+        }
+        
+    }
+//Robots
+    //EC
+    static int influence;
+    static int numeroR=0;
+    static int politicianFrequency=0;
+    static int slandererFrequency=0;
+    static int muckrackerFrequency=0;
+    //Tipo de robots
+	static RobotType randomSpawnableRobotType() {
+		return spawnableRobot[(int) (Math.random() * spawnableRobot.length)];
+	}
+	//elegir estrategia
+	static RobotTypeDecider elegirEstrategia() {
+		if(turnCount<1000) {
+			return typeDeciders.get(ECMode.EMPEZAR);
+		}else if(rc.getInfluence()>1000) {
+			return typeDeciders.get(ECMode.ATACAR);
+		}else {
+			return typeDeciders.get(ECMode.DEFENDER);
+		}
+	}
+	//Eleccion de influecia
+	static int escogerInfluencia(RobotType toBuild) {
+		switch(toBuild) {
+			case POLITICIAN:
+				return 35;
+			case SLANDERER:
+				return 20;
+			default:
+				return 1;
+		}
+	}
+	//Contador Robots
+	static int contadorRobots=0;
+    //Crear robots
+    static void runEnlightenmentCenter() throws GameActionException {
+        //elegir estrategia
+    	RobotTypeDecider estrategiaCreacion= elegirEstrategia();
+    	//eleccion de robot
+    	RobotType toBuild = estrategiaCreacion.crear();
+        //creacion de robots
+    	int influence = escogerInfluencia(toBuild);
+        for (Direction dir : directions) {
+            if (rc.canBuildRobot(toBuild, dir, influence)) {
+                rc.buildRobot(toBuild, dir, influence);
+                contadorRobots++;
+            } else {
+                if(rc.canBuildRobot(RobotType.POLITICIAN, dir, influence)) {
+                	rc.buildRobot(RobotType.POLITICIAN, dir, influence);
+                	contadorRobots++;
+                }else {
+            	break;}
+            }
+        }        
+    }
+    
+    //Estrategias
+    private enum ECMode {
+    	ATACAR,
+    	DEFENDER,
+    	EMPEZAR
+    }
+    
+    private static final HashMap<ECMode, RobotTypeDecider> typeDeciders = new HashMap() {{
+    	put(ECMode.EMPEZAR, new RobotTypeDecider(5, 1, 1));
+    	put(ECMode.ATACAR, new RobotTypeDecider(5, 3, 1));
+    	put(ECMode.DEFENDER, new RobotTypeDecider(5, 3, 1));
+    }};       
+    
+    
+    static boolean EcEncontrado;
+    static MapLocation EcDestino;
+    //Politicos (50)
+	static void runPolitician() throws GameActionException {
+		System.out.println(EcEncontrado);
+		
+		int actionRadius = rc.getType().actionRadiusSquared;
+		Team enemy = rc.getTeam().opponent();
+		RobotInfo[] attackable = rc.senseNearbyRobots(actionRadius, enemy);
+
+		if (EcEncontrado) {//atacamos EC
+			System.out.println(checkIfECWon() );
+			for (final RobotInfo target : attackable) {
+				if (target.type == RobotType.ENLIGHTENMENT_CENTER) {
+					if (checkIfECWon()) {
+						Logging.log("EC won!");
+						//rc.setFlag(Flags.encodeECTakenFlag()); ns el uso :)
+						EcEncontrado = false;//Dejamos de atacar al tomarlo
+					}else {
+						if (rc.canEmpower(actionRadius)) {
+							rc.empower(actionRadius);
+						}
+						rc.move(Direction.CENTER);
+						EcEncontrado = true;
+						return;
+					}
+				}else {//aun no hemos llegado asi que seguimos en esa direccion
+					Direction EcDireccion = SeguirRuta.encontrarcamino(EcDestino, rc);
+					SeguirRuta.tryMove(EcDireccion, rc);
+				}
+			}
+		}else {
+
+			for (final RobotInfo target : attackable) {
+				if (target.type == RobotType.ENLIGHTENMENT_CENTER) {//si encnotramos un EC empezamos a dirigirnos todos hacia alli
+					EcEncontrado = true;
+					EcDestino = target.getLocation();
+					if (rc.canEmpower(actionRadius)) {
+						rc.empower(actionRadius);
+					}
+					rc.move(Direction.CENTER);
+					return;
+				}
+			}
+			if(!EcEncontrado) {
+			if (attackable.length != 0 && rc.canEmpower(actionRadius)) {//si nos encontramos un enemigo atacamos si podemos
+				System.out.println("empowering...");
+				rc.empower(actionRadius);
+				System.out.println("empowered");
+				return;
+			}
+			if (tryMove(movimiento(rc)))
+				System.out.println("I moved!");}
+		}
+
+	}
+	//Hemos ganad el EC?
+	static Team enemy;
+	static boolean checkIfECWon() {
+        final RobotInfo[] friendly = rc.senseNearbyRobots(RobotType.POLITICIAN.sensorRadiusSquared, enemy.opponent());
+        return Arrays.stream(friendly).anyMatch(robotInfo ->
+            robotInfo.type == RobotType.ENLIGHTENMENT_CENTER && robotInfo.location.equals(EcDestino));
+    }
+
+	
+	
+    //Robots(22)
+    static void runSlanderer() throws GameActionException {
+        if (tryMove(movimiento(rc)))
+            System.out.println("I moved!");
+    }
+
+    //Calumniador(3)
+    static void runMuckraker() throws GameActionException {
+        Team enemy = rc.getTeam().opponent();
+        int actionRadius = rc.getType().actionRadiusSquared;
+        for (RobotInfo robot : rc.senseNearbyRobots(actionRadius, enemy)) {
+            if (robot.type.canBeExposed()) {
+                // It's a slanderer... go get them!
+                if (rc.canExpose(robot.location)) {
+                    System.out.println("e x p o s e d");
+                    rc.expose(robot.location);
+                    return;
+                }
+            }
+        }
+        if (tryMove(movimiento(rc)))
+            System.out.println("I moved!");
+    } 
+    
+    
+    //Movimientos
+    /**
+     * Attempts to move in a given direction.
+     *
+     * @param dir The intended direction of movement
+     * @return true if a move was performed
+     * @throws GameActionException
+     */
+    static boolean tryMove(Direction dir) throws GameActionException {
+        System.out.println("I am trying to move " + dir + "; " + rc.isReady() + " " + rc.getCooldownTurns() + " " + rc.canMove(dir));
+        if (rc.canMove(dir)) {
+            rc.move(dir);
+            return true;
+        } else return false;
+    }
+    //Direcciones
+    /**
+     * Returns a random Direction.
+     *
+     * @return a random Direction
+     */
+    static List<MapLocation> ruta = new ArrayList<MapLocation>();
+    static Direction movimiento(RobotController rc) throws GameActionException {
+        //Haciendo pruebas me he dado cuenta de que el robot se puede quedar "encerrado" entre dos casillas si son las que mayor pasabilidad tienen por eso tengo en cuenta
+        //de cual viene y si ese sera la siguiente con mayor pasabilidad que no vuelva a esa
+        ruta.add(rc.getLocation());
+        final MapLocation posicionanterior= rc.getLocation();
+        List<Double> listaConCeldasAdyacentes = new ArrayList<Double>();
+        listaConCeldasAdyacentes.add(rc.sensePassability( rc.adjacentLocation(Direction.NORTH )));
+        listaConCeldasAdyacentes.add(rc.sensePassability( rc.adjacentLocation(Direction.NORTHEAST )));
+        listaConCeldasAdyacentes.add(rc.sensePassability( rc.adjacentLocation(Direction.NORTHWEST )));
+        listaConCeldasAdyacentes.add(rc.sensePassability( rc.adjacentLocation(Direction.EAST )));
+        listaConCeldasAdyacentes.add(rc.sensePassability( rc.adjacentLocation(Direction.WEST )));
+        listaConCeldasAdyacentes.add(rc.sensePassability( rc.adjacentLocation(Direction.SOUTH )));
+        listaConCeldasAdyacentes.add(rc.sensePassability( rc.adjacentLocation(Direction.SOUTHEAST )));
+        listaConCeldasAdyacentes.add(rc.sensePassability( rc.adjacentLocation(Direction.SOUTHWEST )));
+
+        double numeroMayor = listaConCeldasAdyacentes.get(0);
+        int posicionNumeroMayor=0;
+        for(int i=0; i<9; i++){
+            if(listaConCeldasAdyacentes.get(i) >numeroMayor){
+                numeroMayor = listaConCeldasAdyacentes.get(i);
+                posicionNumeroMayor=i;
+            }
+        }
+        List<Direction> listaConDirecciones = new ArrayList<Direction>();
+        listaConDirecciones.add(Direction.NORTH);
+        listaConDirecciones.add(Direction.NORTHEAST);
+        listaConDirecciones.add(Direction.NORTHWEST);
+        listaConDirecciones.add(Direction.EAST);
+        listaConDirecciones.add(Direction.WEST);
+        listaConDirecciones.add(Direction.SOUTH);
+        listaConDirecciones.add(Direction.SOUTHEAST);
+        listaConDirecciones.add(Direction.SOUTHWEST);
+
+        //Ahora si el robot ya ha pasado por esa ruta que no la repita
+        while (ruta.contains(listaConDirecciones.get(posicionNumeroMayor))){
+            //Primero miramos si ya ha pasado por todos
+            boolean hapasadoportodas=true;
+            for (int i=0; i<9; i++){
+                if (!ruta.contains(listaConDirecciones.get(i))){
+                    hapasadoportodas=false;
+                }
+            }
+            //Si ha pasado por todas pues que vaya a una aleatoria
+            if (hapasadoportodas){
+                return directions[(int) (Math.random() * directions.length)];
+            }
+            //Ahora si falta alguna por pasar, buscamos la posicion con mayor pasabilidad y la cambiamos a cero para asi poder la segunda pero que no haya pasado por ella
+            for (int i=0; i<9; i++){
+                if(ruta.contains(listaConDirecciones.get(i))){
+                    listaConCeldasAdyacentes.set(i, (double) 0);
+                }
+            }
+            //Volvemos a buscar la de mayor pasabilidad una vez que hemos eliminado por la que ya ha pasado
+            for(int i=0; i<9; i++){
+                if(listaConCeldasAdyacentes.get(i) >numeroMayor){
+                    numeroMayor = listaConCeldasAdyacentes.get(i);
+                    posicionNumeroMayor=i;
+                }
+            }
+        }
+        return listaConDirecciones.get(posicionNumeroMayor);
+}
+}
